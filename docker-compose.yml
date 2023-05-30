@@ -1,0 +1,119 @@
+version: "3.9"
+volumes:
+  db-store:
+  opencart-data:
+networks:
+  backend:
+services:
+  ### INSTALLATION OF OPENCART ########################################
+  ## YOU CAN COMMENT THIS SERVICE AFTER INSTALLING
+  #####################################################################
+  app:
+    working_dir: /var/www/opencart
+    build:
+      context: .
+      dockerfile: ./docker/opencart/opencart.dockerfile
+    volumes:
+      - ./docker/opencart/install_opencart.sh:/var/www/opencart/install_opencart.sh
+      - ./.env:/var/www/opencart/.env
+      - type: volume
+        source: opencart-data
+        target: /var/www/opencart
+        volume:
+          nocopy: true
+    networks:
+      backend:
+    command: bash -c "chmod +x /var/www/opencart/install_opencart.sh && /var/www/opencart/install_opencart.sh" #
+
+  ### php-fpm-5.6 ########################################
+  php-fpm-5.6:
+    container_name: "${APP_NAME}-php-fpm-5.6"
+    build:
+      context: .
+      dockerfile: ./docker/php/5.6/php.dockerfile
+    volumes:
+      - opencart-data:/var/www/opencart
+      - ./.env:/var/www/opencart/.env
+    networks:
+      - backend
+
+
+  ### php-fpm-7.3 ########################################
+  php-fpm-7.3:
+    container_name: "${APP_NAME}-php-fpm-7.3"
+    build:
+      context: .
+      dockerfile: ./docker/php/7.3/php.dockerfile
+    volumes:
+      - opencart-data:/var/www/opencart
+      - ./.env:/var/www/opencart/.env
+    networks:
+      - backend
+
+
+  ### php-fpm-8.1 #########################################
+  php-fpm-8.1:
+    container_name:  "${APP_NAME}-php-fpm-8.1"
+    build:
+      context: .
+      dockerfile: ./docker/php/8.1/php.dockerfile
+    volumes:
+      - opencart-data:/var/www/opencart
+      - ./.env:/var/www/opencart/.env
+    networks:
+      - backend
+    #command: bash -c "/var/www/opencart/install_database.sh && php-fpm" #Z
+
+
+  ### Nginx #########################################
+  web:
+    container_name: "${APP_NAME}-web"
+    build:
+      context: .
+      dockerfile: ./docker/nginx/nginx.dockerfile
+    ports:
+      - target: ${WEB_PUBLISHED_PORT:-80}
+        published: ${WEB_PUBLISHED_PORT:-80}
+        protocol: tcp
+        mode: host
+    volumes:
+      - ./.env:/var/www/opencart/.env
+      - opencart-data:/var/www/opencart:rw
+      - type: bind
+        source: ./docker/nginx/default.conf
+        target: /etc/nginx/conf.d/default.conf
+
+    networks:
+      - backend
+    depends_on:
+          - db
+          - php-fpm-5.6
+          - php-fpm-7.3
+          - php-fpm-8.1
+
+
+  ### MySQL #########################################
+  db:
+    container_name: "db"
+    networks:
+      - backend
+    build:
+      context: .
+      dockerfile: ./docker/mysql/mysql.dockerfile
+    ports:
+      - target: ${DB_PORT:-3306}
+        published: ${DB_PORT:-3306}
+        protocol: tcp
+        mode: host
+    volumes:
+      - type: volume
+        source: db-store
+        target: /var/lib/mysql
+        volume:
+          nocopy: true
+    environment:
+      - MYSQL_DATABASE=${DB_DATABASE}
+      - MYSQL_USER=${DB_USERNAME}
+      - MYSQL_PASSWORD=${DB_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+
